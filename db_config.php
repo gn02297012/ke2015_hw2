@@ -6,6 +6,6 @@
 $DB_CONFIG = array(
     'hostname' => 'localhost',
     'username' => 'ke2015',
-    'password' => '12345678',
+    'password' => 'password',
     'dbname' => 'ke2015',
 );
