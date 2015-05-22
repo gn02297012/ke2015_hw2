@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * 定義其他類別的文字，避免出現"其他"、"其它"這種同義不同字的情況
+ */
+define('TEXT_OTHER', '其他');
+
 class Controller {
 
     private $dbh = null;
@@ -71,6 +76,40 @@ class Controller {
     }
 
     /**
+     * 根據傳入的section算出是哪個分類的
+     */
+    private function getTopic($section) {
+        $topicList = array(
+            '影劇娛樂' => array('影', '劇', '娛', '樂', '名采人間事總覽'),
+            '運動' => array('棒球', '運動', '體壇', '體育'),
+            '兩岸' => array('兩岸'),
+            '財經' => array('財經', '股市', '房市'),
+            '保健' => array('醫藥', '健康'),
+            '政治' => array('政治'),
+            '社會' => array('社會'),
+        );
+        $findTopic = false;
+        foreach ($topicList as $topic => $list) {
+            //判斷section中是否出現特定的字
+            for ($i = 0, $count = count($list); $i < $count; $i++) {
+                if (mb_strpos($section, $list[$i]) !== false) {
+                    $findTopic = $topic;
+                    break;
+                }
+            }
+            //如果找到topic就跳離foreach迴圈
+            if ($findTopic !== false) {
+                break;
+            }
+        }
+        //預設值: 其他
+        if ($findTopic === false) {
+            $findTopic = TEXT_OTHER;
+        }
+        return $findTopic;
+    }
+
+    /**
      * 分類標記
      */
     public function classify() {
@@ -98,7 +137,7 @@ class Controller {
         $classes = $this->fetchAll($sql);
         //將分類文章數變成MAP
         $classCountMap = array(
-            '其他' => array(
+            TEXT_OTHER => array(
                 'count' => $docCount,
                 'p' => 0,
             ),
@@ -111,7 +150,7 @@ class Controller {
                 'p' => 0,
             );
             //把其他分類的文章數量減掉此分類的文章數量
-            $classCountMap['其他']['count'] -= $value;
+            $classCountMap[TEXT_OTHER]['count'] -= $value;
         }
         //算出各分類的出現機率
         foreach ($classCountMap as $key => &$obj) {
@@ -122,14 +161,16 @@ class Controller {
         $this->dbh->beginTransaction();
         $sql = array(
             'delete' => 'DELETE FROM `classify` WHERE `id` = ?;',
-            'insert' => 'INSERT INTO `classify` (`id`, `class`, `keyword`) VALUES (?, ?, ?);',
+            'insert' => 'INSERT INTO `classify` (`id`, `class`, `keyword`, `section`) VALUES (?, ?, ?, ?);',
         );
         //開始分類所有文章
         $this->timer->Start(); //開始計時
         for ($index = 0; $index < $docCount; $index++) {
-            $data = $documents[$index];
+            $data = &$documents[$index];
             //只要處理文章的內文
             $content = $data['content'];
+            //根據section算出對應的topic
+            $data['topic'] = $this->getTopic($data['section']);
             //算出各關鍵字的機率
             $keywords = [];
             $keywords1 = [];
@@ -163,7 +204,7 @@ class Controller {
 
             //找出最有可能的類別
             $answer = array(
-                'class' => '其他',
+                'class' => TEXT_OTHER,
                 'p' => 0,
             );
             foreach ($prob as $key => $value) {
@@ -179,7 +220,7 @@ class Controller {
             $sth = $this->dbh->prepare($sql['delete']);
             $sth->execute(array($data['id']));
             $sth = $this->dbh->prepare($sql['insert']);
-            $sth->execute(array($data['id'], $answer['class'], json_encode($keywords)));
+            $sth->execute(array($data['id'], $answer['class'], json_encode($keywords), $data['topic']));
         }
         $this->dbh->commit();
         $spentTime = $this->timer->StopAndReset(); //算出耗時
@@ -189,7 +230,7 @@ class Controller {
 
     public function test() {
         //讀出一篇文章
-        $doc = (isset($_GET['doc']) ? $_GET['doc'] : null);
+        $doc = (isset($_GET['doc']) ? trim($_GET['doc']) : null);
         $target = null;
         $sql = "SELECT * FROM `ke2015_sample_news` INNER JOIN `classify` ON `ke2015_sample_news`.`id` = `classify`.`id` WHERE `ke2015_sample_news`.`id` = ? LIMIT 1;";
         $target = $this->fetch($sql, array($doc));
@@ -210,7 +251,7 @@ class Controller {
         $classes = $this->fetchAll($sql);
         $classCount = count($classes);
         $spentTime = $this->timer->StopAndReset(); //算出耗時
-        $this->showText("查詢所有分類結果成功，共有{$classCount}筆資料，耗時: {$spentTime}");
+        //$this->showText("查詢所有分類結果成功，共有{$classCount}筆資料，耗時: {$spentTime}");
         $this->showText();
 
         //可能相似的文章
@@ -224,7 +265,7 @@ class Controller {
             $similarFlag = false;
             //向量長度、將關鍵字建立MAP
             $classes[$i]['keywordMap'] = array();
-            $long = 0;
+            $norm = 0;
             foreach ($vector as $dim) {
                 $word = $dim['word'];
                 $n = intval($dim['n']);
@@ -232,11 +273,11 @@ class Controller {
                     $similarFlag = true;
                 }
                 $classes[$i]['keywordMap'][$word] = $n;
-                $long += pow($n, 2);
+                $norm += pow($n, 2);
             }
-            $long = sqrt($long);
+            $norm = sqrt($norm);
             $classes[$i]['keyword'] = $vector;
-            $classes[$i]['norm'] = $long;
+            $classes[$i]['norm'] = $norm;
             //只存跟目標文章有重複關鍵字的文章
             if ($similarFlag === true) {
                 //因為這邊都算好了，就直接把id跟目標文章相同的資料也存到目標文章中
@@ -286,6 +327,9 @@ class Controller {
                     unset($similarDocuments[$i]['keywordMap'][$key]);
                 }
             }
+            //重新取得分類
+            $similarDocuments[$i]['class'] = $this->getTopic($docDetail['section']);
+            //顯示結果
             $keywordSeq = implode(', ', array_keys($similarDocuments[$i]['keywordMap']));
             $this->showText(" - {$i} {$similarDocuments[$i]['class']} {$similarDocuments[$i]['id']} {$docDetail['source']} {$docDetail['section']} {$docDetail['title']} {$similarDocuments[$i]['similar']} [{$keywordSeq}]");
             //計算knn
@@ -294,46 +338,64 @@ class Controller {
             }
             $knnMap[$similarDocuments[$i]['class']] += 1;
         }
-        //knn結果
-        unset($knnMap['其他']);
+        //移除knn結果的其他，讓預設都先出現有主題
+        unset($knnMap[TEXT_OTHER]);
+        //計算knn結果
         $knnKeys = array_keys($knnMap);
         $knnValues = array_values($knnMap);
         array_multisort($knnValues, SORT_DESC, $knnKeys);
         if (count($knnKeys) > 0) {
             $this->showText("knn result: {$knnKeys[0]}");
         } else {
-            $this->showText("knn result: 找不到");
+            //如果都找不到分類，就顯示其他
+            $this->showText("knn result: 其他");
         }
 
         //自動摘要
         $this->showText("文章摘要:");
+        //將句號。替換成逗號，
         $target['content'] = mb_ereg_replace('。', '，', $target['content']);
+        //用逗號，去切句子
         $sentence = mb_split('，', $target['content']);
-        $summaryCount = 1;
-        for ($i = 1, $count = count($sentence); $i < $count; $i++) {
-            //檢查句子中是否有出現關鍵字
-            $gotKeyword = false;
+        $sentenceCount = count($sentence);
+        //去除尾端的空白句子
+        while (empty($sentence[$sentenceCount - 1])) {
+            array_splice($sentence, -1, 1);
+            $sentenceCount--;
+        }
+        //統計每個句子出現過幾個關鍵字
+        $sentenceKeywordStat = array();
+        //自動摘要會取多少句子
+        $summaryCount = 3;
+        for ($i = 0; $i < $sentenceCount; $i++) {
+            $keywordCount = 0;
+            //檢查句子中是否有出現關鍵字，並進行統計
             foreach ($target['keyword'] as $dim) {
                 $word = $dim['word'];
-                if (mb_strpos($sentence[$i], $word) !== false) {
-                    $gotKeyword = true;
-                    break;
+                $keywordCount += mb_substr_count($sentence[$i], $word);
+            }
+            //進行累加
+            if ($i > 0) {
+                $keywordCount += $sentenceKeywordStat[$i - 1];
+            }
+            $sentenceKeywordStat[] = $keywordCount;
+        }
+        if ($sentenceCount < $summaryCount) {
+            $this->showText($target['content']);
+        } else {
+            //算出每五句中出現關鍵字的數量
+            $maxIndex = 0;
+            $maxSum = $sentenceKeywordStat[$summaryCount - 1];
+            for ($i = $summaryCount; $i < $sentenceCount; $i++) {
+                $sum = $sentenceKeywordStat[$i] - $sentenceKeywordStat[$i - $summaryCount];
+                if ($sum > $maxSum) {
+                    $maxIndex = $i - $summaryCount + 1;
+                    $maxSum = $sum;
                 }
             }
-            //如果有出現關鍵字就產生摘要
-            if ($gotKeyword === true) {
-                echo " - {$summaryCount} {$sentence[$i - 1]}，{$sentence[$i]}";
-                if ($i < ($count - 1)) {
-                    echo "{$sentence[$i + 1]}";
-                }
-                echo "\n";
-                //摘要數量++
-                $i+=2;
-                $summaryCount++;
-                if ($summaryCount > 3) {
-                    break;
-                }
-            }
+            //將句子組合成摘要
+            $summary = array_slice($sentence, $maxIndex, $summaryCount);
+            $this->showText(implode('，', $summary));
         }
     }
 
