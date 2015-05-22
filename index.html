@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<!--
+To change this license header, choose License Headers in Project Properties.
+To change this template file, choose Tools | Templates
+and open the template in the editor.
+-->
+<html>
+    <head>
+        <title>知識工程作業二 KE2015_HW2</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body>
+        
+        <form action="main.php" method="GET" target="main" style="display: none;">
+            <input type="hidden" name="action" value="classify">
+            <label>訓練</label>
+            <input type="submit">
+        </form>
+        <form action="main.php" method="GET" target="main">
+            <input type="hidden" name="action" value="test">
+            <label>
+                文章
+                <select name="doc">
+                    <option value="1427440615049_N01">1427440615049_N01逾21年未調價 台灣水價僅全球1/5</option>
+                    <option value="1427958013238_N01">1427958013238_N01爽保樂安、樂胃如 恐也用黑心碳酸鎂</option>
+                    <option value="1428298064829_N01">1428298064829_N01阿帕契案洩軍機 勞乃成坦承「做了不該做的事」</option>
+                    <option value="1428007295925_N01">1428007295925_N01昆凌懷孕 周杰倫臉書秀老婆凸肚照</option>
+                    <option value="1427660012352_N01">1427660012352_N01好友郭俊麟奪首勝 周興哲想沾喜氣</option>
+                    <option value="1427354105421_N01">1427354105421_N01祭李光耀 美派柯林頓代表</option>
+                    <option value="1427871470025_N01">1427871470025_N01幸福人壽前老董千萬交保 地院烏龍？</option>
+                    <option value="1427570908187_N01">1427570908187_N01俄、澳將加入 亞投行已41國申請</option>
+                    <option value="1427857112056_N01">1427857112056_N01陳國恩:持續推動減化警察協辦業務</option>
+                    <option value="1427235339440_N01">1427235339440_N01李光耀辭世 馬赴星私人弔唁</option>
+                </select>
+            </label>
+            <input type="submit">
+        </form>
+    </body>
+</html>
