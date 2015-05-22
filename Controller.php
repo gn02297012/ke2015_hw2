@@ -281,6 +281,11 @@ class Controller {
             $doc = $similarDocuments[$i];
             //從資料庫中讀取文章的詳細資料
             $docDetail = $this->fetch($sql, array($similarDocuments[$i]['id']));
+            foreach ($similarDocuments[$i]['keywordMap'] as $key => $value) {
+                if (!in_array($key, $targetKeywords)) {
+                    unset($similarDocuments[$i]['keywordMap'][$key]);
+                }
+            }
             $keywordSeq = implode(', ', array_keys($similarDocuments[$i]['keywordMap']));
             $this->showText(" - {$i} {$similarDocuments[$i]['class']} {$similarDocuments[$i]['id']} {$docDetail['source']} {$docDetail['section']} {$docDetail['title']} {$similarDocuments[$i]['similar']} [{$keywordSeq}]");
             //計算knn
